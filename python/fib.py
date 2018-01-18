@@ -2,9 +2,7 @@
 import pika
 import json
 import sys
-
-connection = pika.BlockingConnection(pika.URLParameters("amqp://rxuhxbbh:mkywerCtgEVDC-LOARLwgi7mm4xhteZA@white-swan.rmq.cloudamqp.com/rxuhxbbh"))
-channel = connection.channel()
+from urllib.parse import unquote
 
 def fib(n):
     if n == 0:
@@ -15,14 +13,20 @@ def fib(n):
         return fib(n-1) + fib(n-2)
 
 def publish_back():
-    body = json.load(sys.stdin)
+    connection = pika.BlockingConnection(pika.URLParameters("amqp://rxuhxbbh:mkywerCtgEVDC-LOARLwgi7mm4xhteZA@white-swan.rmq.cloudamqp.com/rxuhxbbh"))
+    ch = connection.channel()
+    ch.queue_declare(queue='rpc_queue')
+    body = json.loads(unquote(sys.argv[1]))
+    print(body)
     n = int(body['n'])
-    print(" [.] fib(%s)" % n)
+    reply_to = body['reply_to']
+    correlation_id = body['correlation_id']
     response = fib(n)
-    channel.basic_publish(exchange='',
-                     routing_key=props.reply_to,
-                     properties=pika.BasicProperties(correlation_id=props.correlation_id),
+    ch.basic_publish(exchange='',
+                     routing_key=reply_to,
+                     properties=pika.BasicProperties(correlation_id=correlation_id),
                      body=str(response))
-    channel.basic_ack(delivery_tag=method.delivery_tag)
+    print(" [x] Sent " + str(response) + " to " + reply_to)
+    connection.close()
 
 publish_back()

@@ -1,35 +1,31 @@
 #!/usr/bin/env python
 import pika
 import json
+from subprocess import Popen
+import sys
+from urllib.parse import quote
+
+DETACHED_PROCESS = 0x00000008
+
 
 connection = pika.BlockingConnection(pika.URLParameters("amqp://rxuhxbbh:mkywerCtgEVDC-LOARLwgi7mm4xhteZA@white-swan.rmq.cloudamqp.com/rxuhxbbh"))
 channel = connection.channel()
 channel.queue_declare(queue='rpc_queue')
 
-def fib(n):
-    if n == 0:
-        return 0
-    elif n == 1:
-        return 1
-    else:
-        return fib(n-1) + fib(n-2)
-
 def on_request(ch, method, props, body):
-    print(ch)
     body = json.loads(body)
-    n = int(body['n'])
-
-    print(" [.] fib(%s)" % n)
-
-    response = fib(n)
-    ch.basic_publish(exchange='',
-                     routing_key=props.reply_to,
-                     properties=pika.BasicProperties(correlation_id=props.correlation_id),
-                     body=str(response))
+    model = body['model']
+    print(" Processing " + model)
+    body['reply_to'] = props.reply_to
+    body['correlation_id'] = props.correlation_id
+    cmd = [
+        'python',
+         model + '.py',
+         quote(json.dumps(body))
+    ]
+    print(json.dumps(body))
+    p = Popen(cmd, shell=False, stdin=None, stdout=None, stderr=None, close_fds=True, creationflags=DETACHED_PROCESS)
     ch.basic_ack(delivery_tag=method.delivery_tag)
-
-    # response = {fib_result: fib(n)}
-    # json.dumps(response))
 
 channel.basic_qos(prefetch_count=1)
 channel.basic_consume(on_request, queue='rpc_queue')
